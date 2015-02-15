@@ -1,25 +1,216 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+title: "Project 1"
+author: "David Berkowitz"
+date: "February 8, 2015"
+output: html_document
 ---
 
+### Loading and preprocessing the data
 
-## Loading and preprocessing the data
+> Show any code that is needed to  
+> Load the data (i.e. read.csv())  
+> Process/transform the data (if necessary) into a format suitable for your analysis
 
+```{r}
 
+# does the csv file already exist?
+if (!file.exists("activity.csv"))
+  {
+    ##  get it
+    cat ("downloading the zip file\n")
+    system ("curl --get https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip >data.zip")
+    
+    ## unzip it
+    cat ("unzipping the zip file\n")
+    system ("unzip -q data.zip")
+  }
 
-## What is mean total number of steps taken per day?
+# read the data
+activity = read.csv ("activity.csv")
 
+# examine some information about the data
+str (activity)
+summary (activity)
+sum (activity$steps, na.rm=TRUE)
+```
 
+We can already see that: 
 
-## What is the average daily activity pattern?
+  * There are 17568 observations
+  * Number of steps per interval range from 0 to 806 with 2,304 missing (NA) values
+  * There are observations from 61 different dates ranging from 10/1/12 to 11/30/12 - all of October and November 2012
+  * Interval ranges from 0 to 2355 suggesting it represents hours and minutes of each 5-minute interval
+  * Total number of steps measured is 570,608
+  
+We observe that date is already a factor. At this point, little value is seen in converting steps or interval into a factor.  So no further processing is needed at this point.
 
+### What is mean total number of steps taken per day?
 
+> For this part of the assignment, you can ignore the missing values in the dataset.  
+> Make a histogram of the total number of steps taken each day  
+> Calculate and report the mean and median total number of steps taken per day  
 
-## Imputing missing values
+```{r}
+# sum steps for each date
+a = aggregate (steps ~ date, data=activity, FUN=sum)
 
+# exploratory
+str (a)
+plot (a$date, a$steps)
+boxplot (a$steps)
+sum (a$steps)
 
+# plot histogram
+hist (a$steps, labels=TRUE)
 
-## Are there differences in activity patterns between weekdays and weekends?
+# shows both mean and median
+summary (a)
+```
+
+### What is the average daily activity pattern?
+
+> Make a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all days (y-axis)  
+> Which 5-minute interval, on average across all the days in the dataset, contains the maximum number of steps?  
+
+```{r}
+# take the mean steps for each interval
+b = aggregate (steps ~ interval, data = activity, mean)
+
+# plot but supress the x-axis
+plot (b, type = "l", xaxt = "n")
+
+# draw x-axis with tick marks every 3 hours
+axis (1, at = seq (0, 2400, 300))
+
+maxIntervalIndex = which.max (b$steps)
+maxInterval = b$interval [maxIntervalIndex]
+maxInterval
+maxSteps = b$steps [maxIntervalIndex]
+maxSteps
+```
+
+The interval with highest average steps across all dates is 835 or 8:35 AM.
+The average steps in that interval is 206.1698.
+
+### Imputing missing values
+
+> Note that there are a number of days/intervals where there are missing values (coded as NA). The presence of missing days may introduce bias into some calculations or summaries of the data.  
+> Calculate and report the total number of missing values in the dataset (i.e. the total number of rows with NAs)  
+> Devise a strategy for filling in all of the missing values in the dataset. The strategy does not need to be sophisticated. For example, you could use the mean/median for that day, or the mean for that 5-minute interval, etc.  
+> Create a new dataset that is equal to the original dataset but with the missing data filled in.  
+> Make a histogram of the total number of steps taken each day and Calculate and report the mean and median total number of steps taken per day. Do these values differ from the estimates from the first part of the assignment? What is the impact of imputing missing data on the estimates of the total daily number of steps?  
+
+```{r}
+# total number of NAs
+sum (is.na (activity))
+```
+
+The total number of NAs in the activity dataset is 2304.
+They all appear in the steps column.
+This is also confirmed in the earlier output from summary (a).
+
+My strategy for filling in the missing values of the data set (steps) is as follows:
+
+* if a value is NA, use the previous value
+* in case this is the first row of the dataset, simply use zero
+
+I have used this method over the years in Excel to deal with missing values,
+and it has generally proven successful. It tends to "smooth out" the data.
+
+```{r}
+d = activity$steps
+l = length (d)
+l
+
+for (i in 1:l)
+  {
+  #cat (d[i], "\n")
+  
+  if (is.na (d[i]))
+    {
+    if (i == 1)
+      {
+      d [i] = 0
+      #cat (i, "replaced with zero\n")
+      }
+    else
+      {
+      d [i] = d [i-1]
+      #cat (i, "replaced with ", d [i-1], "\n")
+      }
+    }
+  }
+
+# d no longer has any NA values
+sum (is.na (d))
+str (d)
+summary (d)
+
+# construct a new copy of activities
+c = activity
+
+# replace steps with the imputed values
+c$steps = d
+
+# sum steps for each date
+e = aggregate (steps ~ date, data = c, sum)
+
+# exploratory
+str (e)
+plot (e$date, e$steps)
+boxplot (e$steps)
+sum (e$steps)
+e
+
+# plot histogram
+hist (e$steps, labels=TRUE)
+
+# shows both mean and median
+summary (e)
+
+# difference between original and new estimate with imputed values
+summary (a$steps)
+summary (e$steps)
+summary (a$steps) - summary (e$steps)
+```
+
+As it turns out,
+every NA value is preceded by another NA or a zero. 
+So in effect all imputed values are zero. 
+Which does not change the total number of steps or the daily totals.
+In the histogram, only the first bar is higher due to the newly added zero values.
+But this also skews both the mean and the median as indicated in the new summary.
+
+```{r}
+# number of zeroes in the original data set
+t1 = table (activity$steps)
+t1 ["0"]
+
+# number of zeroes in the modified data set
+t2 = table (d)
+t2 ["0"]
+
+# should match the number of NAs in the original set
+t2 ["0"] - t1 ["0"]
+```
+
+### Are there differences in activity patterns between weekdays and weekends?
+
+> For this part the weekdays() function may be of some help here. Use the dataset with the filled-in missing values for this part.  
+> Create a new factor variable in the dataset with two levels -- "weekday" and "weekend" indicating whether a given date is a weekday or weekend day.  
+> Make a panel plot containing a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekday days or weekend days (y-axis).  
+
+```{r}
+# c is the modified version of activity
+c$date = as.Date (c$date)
+c$dayOfWeek = weekdays (c$date)
+
+# depending on value of dayOfWeek, set dayType
+c$dayType <- as.factor (ifelse (c$dayOfWeek %in% c ("Saturday","Sunday"), "weekend", "weekday")) 
+
+d = aggregate (steps ~ interval + dayType, data = c, mean)
+
+coplot (steps ~ interval | dayType, data = d, type = "l")
+```
+
+Yes - there is a difference in activity pattern. During the week there is a peak in the early morning, followed by generally lower numbers of steps. Yet with defined peaks around lunchtime and later in the day, perhaps corresponding to leaving work. Whereas on the weekends, there appears to be a generally higher level of activity through out the day with few distinguishing peaks. As well there seems to be more late night activity on the weekends.
